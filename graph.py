@@ -22,11 +22,11 @@ load_dotenv()
 
 os.environ['LANGCHAIN_PROJECT'] = 'MARKETING_PROJECT'
 
-TAVILY_TOOL = TavilySearchResults(max_results = 6)
+TAVILY_TOOL = TavilySearchResults(max_results=6)
 MODEL = LLM('groq', 'llama-3.1-70b-versatile').get_llm()
 
 WEBSITE_DATA_AGENT = 'website_data_agent'
-CONSULTANT = 'consultant_agent' # one with internet access
+CONSULTANT = 'consultant_agent'  # one with internet access
 BRAND_TUNER = 'brand_tuner_agent'
 QUALITY_CHECKER = 'quality_checker_agent'
 SAVE_FILE_NODE = 'save_file_agent'
@@ -45,22 +45,15 @@ def create_agent(llm, tools, system_prompt):
     executor = AgentExecutor(agent=agent, tools=tools)
     return executor
 
-# def agent_node(state, agent, name):
-#     result = agent.invoke(state)
-#     return {name: [HumanMessage(content=result['output'], name=name)]}
-
 async def async_agent_node(state: AgentState, agent, name):
     result = await agent.ainvoke(state)
     return {'website_data': [HumanMessage(content=result['output'], name=name)]}
 
-
 # creating agents
 website_data_agent = create_agent(MODEL, [research], Prompts.get_website_data())
 website_data_node = functools.partial(
-    async_agent_node, agent = website_data_agent, name = WEBSITE_DATA_AGENT
+    async_agent_node, agent=website_data_agent, name=WEBSITE_DATA_AGENT
 )
-
-
 
 consultant_agent = create_agent(MODEL, [TAVILY_TOOL], Prompts.get_consultant_prompt())
 
@@ -79,62 +72,70 @@ def brand_tuner_agent_node(state, agent, name):
     result = agent.invoke(state)
     state['last_brand_tuner'] = result['output']
     return {'brand_tuner': [HumanMessage(content=result['output'], name=name)]}
-    
+
+brand_tuner_node = functools.partial(
+    brand_tuner_agent_node, agent = brand_tuner_agent, name=BRAND_TUNER
+)
+
 # QUALITY CHECK NODE
 
 router_function_def = {
     "name": "route",
-    "description": "Select the next role.",
+    "description": "Select the next role or finish based on the findings.",
     "parameters": {
-        "title": "routeSchema",
         "type": "object",
         "properties": {
             "next": {
-                "title": "next",
-                "anyOf": [
-                    {"enum": OPTIONS},
-                ],
+                "type": "string",
+                "enum": OPTIONS,
+                "description": "The next role to be called or FINISH if the process is complete."
+            },
+            "feedback": {
+                "type": "string",
+                "description": "Feedback on the current state or reason for the selection."
             }
         },
-        "required": ["next"],
-    },
+        "required": ["next", "feedback"]
+    }
 }
 
 quality_check_template = ChatPromptTemplate.from_messages([
     ('system', Prompts.get_quality_check_prompt()),
-    MessagesPlaceholder(variable_name='agent_scratchpad'),
     (
         'system',
         'Given the conversation above, who should act next?'
-        ' Or should we FINISH, select one of : {options}',
+        ' Or should we FINISH? Select one of: {options}',
     )]
-).partial(options = ', '.join(OPTIONS), members = ', '.join(MEMBERS)) # ****** rember at time of prompt writing
+).partial(options=', '.join(OPTIONS), members=', '.join(MEMBERS))
 
 quality_check_chain = (
     quality_check_template
-    | MODEL.bind(functions = [router_function_def], function_call='route')
+    | MODEL.bind(functions=[router_function_def], function_call={'name': 'route'})
     | JsonOutputFunctionsParser()
 )
 
-def quality_check_node_func(state: AgentState, agent,  name):
+def quality_check_node_func(state: AgentState, agent, name):
+    for s in state:
+        print(s)
     result = agent.invoke(state)
-    state['feedback'] = result['output']['feedback']
-    state['last_quality_checker'] = result['output']
-    return {'quality_checker': HumanMessage(content=result['output'], name= name)}
+    print('*********************************')
+    print(result)
+    print('*********************************')
+    state['feedback'] = result['output'].get('feedback', '')
+    state['next'] = result['output'].get('next', 'FINISH')
+    return {'quality_checker': HumanMessage(content=str(result['output']), name=name)}
 
 quality_check_node = functools.partial(
-    quality_check_node_func, agent = quality_check_chain, name = QUALITY_CHECKER
+    quality_check_node_func, agent=quality_check_chain, name=QUALITY_CHECKER
 )
 
 workflow = StateGraph(AgentState)
-# workflow.set_entry_point(CONSULTANT, consultant_node)
 workflow.add_node(WEBSITE_DATA_AGENT, website_data_node)
 workflow.add_node(CONSULTANT, consultant_node)
-workflow.add_node(BRAND_TUNER, brand_tuner_agent_node)
+workflow.add_node(BRAND_TUNER, brand_tuner_node)
 workflow.add_node(QUALITY_CHECKER, quality_check_node)
-# add more nodes after 
 
-workflow.set_entry_point(website_data_node)
+workflow.set_entry_point(WEBSITE_DATA_AGENT)
 workflow.add_edge(WEBSITE_DATA_AGENT, CONSULTANT)
 workflow.add_edge(CONSULTANT, BRAND_TUNER)
 workflow.add_edge(BRAND_TUNER, QUALITY_CHECKER)
@@ -143,7 +144,7 @@ conditional_map = {name: name for name in MEMBERS}
 conditional_map['FINISH'] = END
 
 workflow.add_conditional_edges(
-    QUALITY_CHECKER, 
+    QUALITY_CHECKER,
     lambda x: x['next'],
     conditional_map
 )
@@ -162,7 +163,10 @@ async def run_research_graph(input):
         last_brand_tuner="",
         last_consultant="",
         last_quality_checker="",
-        next=""
+        feedback="",
+        next="",
+        OPTIONS= ['consultant_agent', 'brand_tuner_agent', 'FINISH'],
+        MEMBERS= ['consultant_agent', 'brand_tuner_agent']
     )
     async for output in graph.astream(initial_state):
         for node_name, output_value in output.items():
@@ -177,4 +181,3 @@ test_input = {
     "website_links": website_links
 }
 asyncio.run(run_research_graph(test_input))
-

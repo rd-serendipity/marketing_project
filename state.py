@@ -5,7 +5,7 @@ import operator
 class AgentState(TypedDict):
     input: str
     website_links: list[str]
-    requirements_compeleted: bool
+    requirements_completed: bool  # Fixed typo here
 
     website_data: Annotated[Sequence[BaseMessage], operator.add]
     brand_tuner: Annotated[Sequence[BaseMessage], operator.add]
@@ -15,9 +15,7 @@ class AgentState(TypedDict):
     last_brand_tuner: str
     last_consultant: str
     last_quality_checker: str
+    feedback: str
+    OPTIONS: list[str]
+    MEMBERS: list[str]
     next: str
-    
-
-
-
-
