@@ -1,15 +1,12 @@
 import asyncio
 import functools
-import operator
-import uuid
-from typing import Annotated, TypedDict, Sequence
+
 import os
 from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain.agents import create_openai_tools_agent, AgentExecutor
 from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_groq import ChatGroq
 from langgraph.graph import END, StateGraph
 
 from prompt_agents.prompt import Prompts
@@ -59,8 +56,13 @@ consultant_agent = create_agent(MODEL, [TAVILY_TOOL], Prompts.get_consultant_pro
 
 def consultant_agent_node(state, agent, name):
     result = agent.invoke(state)
-    state['last_consultant'] = result['output']
-    return {'consultant': [HumanMessage(content=result['output'], name=name)]}
+    # print('\n\nlast_consutant: ', state['last_consultant'])
+    # state['last_consultant'] = result['output']
+    # print('\n\nafter updatelast_consutant: ', state['last_consultant'])
+    return {
+        'consultant': [HumanMessage(content=result['output'], name=name)],
+        'last_consultant': result['output']    
+        }
 
 consultant_node = functools.partial(
     consultant_agent_node, agent=consultant_agent, name=CONSULTANT
@@ -70,8 +72,11 @@ brand_tuner_agent = create_agent(MODEL, [TAVILY_TOOL], Prompts.get_brand_tuner_p
 
 def brand_tuner_agent_node(state, agent, name):
     result = agent.invoke(state)
-    state['last_brand_tuner'] = result['output']
-    return {'brand_tuner': [HumanMessage(content=result['output'], name=name)]}
+    # state['last_brand_tuner'] = result['output']
+    return {
+        'brand_tuner': [HumanMessage(content=result['output'], name=name)],
+        'last_brand_tuner': result['output']
+        }
 
 brand_tuner_node = functools.partial(
     brand_tuner_agent_node, agent = brand_tuner_agent, name=BRAND_TUNER
@@ -81,7 +86,7 @@ brand_tuner_node = functools.partial(
 
 router_function_def = {
     "name": "route",
-    "description": "Select the next role or finish based on the findings.",
+    "description": "Select the next role or finish based on the findings and give feedback",
     "parameters": {
         "type": "object",
         "properties": {
@@ -115,15 +120,25 @@ quality_check_chain = (
 )
 
 def quality_check_node_func(state: AgentState, agent, name):
-    for s in state:
-        print(s)
+    # for k, v in state.items():
+    #     print(k, ':', v, '\n****************\n')
     result = agent.invoke(state)
-    print('*********************************')
-    print(result)
-    print('*********************************')
-    state['feedback'] = result['output'].get('feedback', '')
-    state['next'] = result['output'].get('next', 'FINISH')
-    return {'quality_checker': HumanMessage(content=str(result['output']), name=name)}
+
+    # print('RESULT\n\n\n****************************')
+    # print(result)
+    # print('*****************************')
+
+    # print('*********************************')
+    # print(result)
+    # print('*********************************')
+    # state['feedback'] = result['output'].get('feedback', '')
+    # state['next'] = result['output'].get('next', 'FINISH')
+    return {
+        'quality_checker': [HumanMessage(content=str(result), name=name)],
+        'last_quality_checker': result,
+        'feedback': result['feedback'],
+        'next': result['next']
+        }
 
 quality_check_node = functools.partial(
     quality_check_node_func, agent=quality_check_chain, name=QUALITY_CHECKER
@@ -166,8 +181,10 @@ async def run_research_graph(input):
         feedback="",
         next="",
         OPTIONS= ['consultant_agent', 'brand_tuner_agent', 'FINISH'],
-        MEMBERS= ['consultant_agent', 'brand_tuner_agent']
+        MEMBERS= ['consultant_agent', 'brand_tuner_agent'],
+        final_output="",
     )
+        
     async for output in graph.astream(initial_state):
         for node_name, output_value in output.items():
             print("---")

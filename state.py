@@ -18,4 +18,5 @@ class AgentState(TypedDict):
     feedback: str
     OPTIONS: list[str]
     MEMBERS: list[str]
+    final_output: str
     next: str

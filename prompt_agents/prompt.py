@@ -96,11 +96,35 @@ Feedback Incorporation: Verify previous feedback is integrated.
 Decision: Based on your evaluation, decide on the next step:
 
 JSON Output EXAMPLE: 
-Issue with Consultant: {"next": "consultant", "feedback": "What was the issue from side of consultant write that here"}
-Ready to Proceed: {"next": "FINISH", "feedback": "no feedback"}
+Issue with Consultant: 
+"next": "consultant"
+ "feedback": "What was the issue from side of consultant write that here"
+ 
+Ready to Proceed: 
+"next": "FINISH"
+ "feedback": "no feedback"
+ 
 Select the appropriate node or finish based on your findings: {OPTIONS}.
 '''
     
+    final_output_prompt = '''
+Your task is to generate a final, cleanly formatted response by synthesizing the outputs from the consultant and brand tuner.
+
+Inputs:
+
+Consultant's Output: {last_consultant}
+Brand Tuner's Output: {last_brand_tuner}
+Instructions:
+
+Focus primarily on the brand tuner’s output, as it has been tailored to the specific brand.
+Integrate any relevant points from the consultant’s output that enhance or clarify the strategy.
+Ensure the final output is well-organized, concise, and free from any extraneous information.
+Format the response cleanly, using markdown where appropriate for clarity (e.g., headings, bullet points).
+Output:
+
+Provide the final, formatted response, ready for presentation or implementation.
+'''
+
 
     @classmethod
     def get_consultant_prompt(cls):
@@ -126,3 +150,8 @@ Select the appropriate node or finish based on your findings: {OPTIONS}.
     def get_website_data(cls):
         """Returns the brand tuner prompt."""
         return cls.website_data_prompt
+    
+    @classmethod
+    def get_website_data(cls):
+        """Returns the brand tuner prompt."""
+        return cls.final_output_prompt
