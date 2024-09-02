@@ -21,9 +21,10 @@ Ensure the document is clean, organized, and easy to read, without any additiona
     consultant_prompt = '''
 As a marketing consultant, your task is to craft detailed marketing strategies tailored to the specific goals and industry of a business. Utilize the following inputs to guide your strategy development:
 
-Input from the User: {input}
+Input from the User about their brand: {input}
 Feedback from Quality Check Node: {feedback}
 Last Output from Consultant Node: {last_consultant}
+Last Output from Brand Tuner Node: {last_brand_tuner}
 Objective: Outline actionable marketing strategies that align with the business's goals, considering industry-specific nuances and metrics.
 
 Steps:
@@ -40,13 +41,14 @@ Strategy: [Detailed Strategy Description]
 Industry Impact: [List the Metrics that will be affected and how]
 Specific Steps: [Breakdown of actionable steps]
 If additional information is required to complete the task, utilize the internet tool available to gather necessary data.
+Always incorporate Feedback from Quality Check Node if any.
 '''
 
 
     brand_tuner_prompt = '''
 As a marketing strategist, your task is to adapt a general marketing strategy for a specific industry and goal, tailoring it to align with a particular brand's identity, products, and services. Use the following inputs to guide your adaptation:
 
-Input from the User: {input}
+Input from the User about their brand: {input}
 Output from Consultant: {last_consultant}
 Feedback from Quality Check Node: {feedback}
 Last Output from Brand Tuner Node: {last_brand_tuner}
@@ -72,6 +74,7 @@ Example Campaigns:
 Campaign 1: [Describe the campaign, including subject line, content, and expected outcome]
 Campaign 2: [Describe the campaign, including subject line, content, and expected outcome]
 If additional information is required to complete the task, utilize the internet tool available to gather necessary data.
+Always incorporate Feedback from Quality Check Node if any.
 '''
 
     requirement_prompt = 'test'
@@ -83,11 +86,10 @@ As a quality check node, evaluate the outputs from the consultant and brand tune
 
 Inputs:
 
-User Input: {input}
+Input from the User about their brand: {input}
 Consultant's Output: {last_consultant}
 Brand Tuner's Output: {last_brand_tuner}
 Feedback from Previous Rounds: {feedback}
-Brand Website Data: {website_data}
 Evaluation Steps:
 
 Consultant's Strategy: Ensure it aligns with the industry and marketing goal, providing detailed and actionable strategies.
@@ -107,8 +109,8 @@ Ready to Proceed:
 Select the appropriate node or finish based on your findings: {OPTIONS}.
 '''
     
-    final_output_prompt = '''
-Your task is to generate a final, cleanly formatted response by synthesizing the outputs from the consultant and brand tuner.
+    formater_prompt = '''
+Your task is to generate a final response by synthesizing the outputs from the consultant and brand tuner. The output should be cleanly formatted in markdown.
 
 Inputs:
 
@@ -116,13 +118,13 @@ Consultant's Output: {last_consultant}
 Brand Tuner's Output: {last_brand_tuner}
 Instructions:
 
-Focus primarily on the brand tuner’s output, as it has been tailored to the specific brand.
-Integrate any relevant points from the consultant’s output that enhance or clarify the strategy.
-Ensure the final output is well-organized, concise, and free from any extraneous information.
-Format the response cleanly, using markdown where appropriate for clarity (e.g., headings, bullet points).
+Prioritize the brand tuner’s output, as it is tailored to the specific brand.
+Integrate any relevant insights from the consultant’s output that enhance the overall strategy.
+Format the final output using markdown, including headings, subheadings, bullet points, and other markdown elements to ensure the document is well-structured and easy to read.
+Avoid adding any extraneous information or commentary.
 Output:
 
-Provide the final, formatted response, ready for presentation or implementation.
+Provide the final, formatted response in markdown, ready for presentation or implementation.
 '''
 
 
@@ -152,6 +154,6 @@ Provide the final, formatted response, ready for presentation or implementation.
         return cls.website_data_prompt
     
     @classmethod
-    def get_website_data(cls):
+    def get_formater_prompt(cls):
         """Returns the brand tuner prompt."""
-        return cls.final_output_prompt
+        return cls.formater_prompt

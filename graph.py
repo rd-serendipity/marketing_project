@@ -2,12 +2,14 @@ import asyncio
 import functools
 
 import os
+import uuid
 from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain.agents import create_openai_tools_agent, AgentExecutor
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import END, StateGraph
+from langchain_core.output_parsers import StrOutputParser
 
 from prompt_agents.prompt import Prompts
 from llm import LLM
@@ -26,6 +28,7 @@ WEBSITE_DATA_AGENT = 'website_data_agent'
 CONSULTANT = 'consultant_agent'  # one with internet access
 BRAND_TUNER = 'brand_tuner_agent'
 QUALITY_CHECKER = 'quality_checker_agent'
+FORMATTER = 'formater_node_agent'
 SAVE_FILE_NODE = 'save_file_agent'
 
 MEMBERS = [CONSULTANT, BRAND_TUNER]
@@ -69,6 +72,8 @@ consultant_node = functools.partial(
 )
 
 brand_tuner_agent = create_agent(MODEL, [TAVILY_TOOL], Prompts.get_brand_tuner_prompt())
+
+
 
 def brand_tuner_agent_node(state, agent, name):
     result = agent.invoke(state)
@@ -144,11 +149,36 @@ quality_check_node = functools.partial(
     quality_check_node_func, agent=quality_check_chain, name=QUALITY_CHECKER
 )
 
+formatter_template = ChatPromptTemplate.from_messages(
+    [
+        ('system', Prompts.get_formater_prompt())
+    ]
+)
+
+formatter_chain = formatter_template | MODEL | StrOutputParser()
+def formatter_node(state):
+    result = formatter_chain.invoke(state)
+    return {
+        'final_output': result
+    }
+
+def save_file_node(state: AgentState):
+    markdown_content = str(state["final_output"])
+    name = state['website_links'][0]
+    filename = f"./{uuid.uuid1()}.md"
+    with open(filename, "w", encoding="utf-8") as file:
+        file.write(markdown_content)
+    return {
+        'final_output': f'Saved final output to {filename}'
+    }
+
 workflow = StateGraph(AgentState)
 workflow.add_node(WEBSITE_DATA_AGENT, website_data_node)
 workflow.add_node(CONSULTANT, consultant_node)
 workflow.add_node(BRAND_TUNER, brand_tuner_node)
 workflow.add_node(QUALITY_CHECKER, quality_check_node)
+workflow.add_node(FORMATTER, formatter_node)
+workflow.add_node(SAVE_FILE_NODE, save_file_node)
 
 workflow.set_entry_point(WEBSITE_DATA_AGENT)
 workflow.add_edge(WEBSITE_DATA_AGENT, CONSULTANT)
@@ -156,13 +186,16 @@ workflow.add_edge(CONSULTANT, BRAND_TUNER)
 workflow.add_edge(BRAND_TUNER, QUALITY_CHECKER)
 
 conditional_map = {name: name for name in MEMBERS}
-conditional_map['FINISH'] = END
+conditional_map['FINISH'] = FORMATTER
 
 workflow.add_conditional_edges(
     QUALITY_CHECKER,
     lambda x: x['next'],
     conditional_map
 )
+
+workflow.add_edge(FORMATTER, SAVE_FILE_NODE)
+workflow.add_edge(SAVE_FILE_NODE, END)
 
 graph = workflow.compile()
 
@@ -192,9 +225,23 @@ async def run_research_graph(input):
             print(output_value)
         print("\n---\n")
 
-website_links = ['https://www.apple.com/', 'https://www.apple.com/iphone/']
+
+data_input = '''Brand Name: The Souled Store
+
+Brand Identity: A trendy and vibrant brand that caters to the youth, focusing on pop culture-inspired merchandise and apparel. The brand emphasizes creativity, self-expression, and a fun, casual lifestyle.
+
+Key Products/Services:
+
+Graphic T-shirts
+Hoodies and sweatshirts
+Shorts and joggers
+Accessories (e.g., bags, caps, phone cases)
+Footwear
+Merchandise related to movies, TV shows, and sports teams'''
+
+website_links = ['https://www.thesouledstore.com']
 test_input = {
-    "input": "My brand name is apple find strategies to find boost sales.",
+    "input": data_input,
     "website_links": website_links
 }
 asyncio.run(run_research_graph(test_input))
