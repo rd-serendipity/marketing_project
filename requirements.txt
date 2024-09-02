@@ -1,0 +1,13 @@
+aiohttp==3.9.5
+beautifulsoup4==4.12.3
+langchain==0.2.15
+langchain_anthropic==0.1.23
+langchain_community==0.2.15
+langchain_core==0.2.37
+langchain_google_genai==1.0.10
+langchain_groq==0.1.9
+langchain_mistralai==0.1.12
+langchain_openai==0.1.23
+langgraph==0.2.16
+pydantic==2.8.2
+python-dotenv==1.0.1

@@ -12,7 +12,7 @@ from langgraph.graph import END, StateGraph
 from langchain_core.output_parsers import StrOutputParser
 
 from prompt_agents.prompt import Prompts
-from llm import LLM
+from models import LLM
 from state import AgentState
 from tools.web import research
 from dotenv import load_dotenv
