@@ -3,7 +3,10 @@ from langchain_core.messages import BaseMessage
 import operator
 
 class AgentState(TypedDict):
-    input: str
+    message_requirements: Annotated[list[BaseMessage], operator.add]
+    next_requirements: str
+    input_data: str
+
     website_links: list[str]
     requirements_completed: bool  # Fixed typo here
 

@@ -153,8 +153,38 @@ If additional information is required to complete the task, utilize the internet
 Always incorporate Feedback from Quality Check Node if any.
 '''
 
-    requirement_prompt = 'test'
+    requirement_prompt = '''
+You are an LLM tasked with gathering specific information about a user's brand. Your goal is to collect the following details:
+brand name, budget, goal. 
+Previous conversation: {message_requirements}.
 
+If the user provides all the necessary details, return the following JSON structure:
+json
+
+
+  "next_requirements": "SUMMARY",
+  "question": "nothing more to ask"
+
+If the information provided by the user is incomplete or you need further clarification, return:
+json
+
+
+  "next_requirements": "MORE_INPUT",
+  "question": "Please provide [specific detail(s) needed]"
+
+If the user's last message indicates that they wish to quit or stop, or if they do not want to provide more information, return:
+json
+
+
+  "next_requirements": "SUMMARY",
+  "question": "user denied to give full information"
+
+Use the context from Previous conversation to evaluate the completeness of the information provided and respond accordingly.
+'''
+
+    summarize_requirements = '''
+Summarize the whole details of the user's brand by refering \nmessages: {message_requirement}.
+'''
 
 
     quality_check_prompt = '''
@@ -213,6 +243,13 @@ Provide the final, formatted response in markdown, ready for presentation or imp
     def get_requirement_prompt(cls):
         """Returns the requirement prompt."""
         return cls.requirement_prompt
+    
+    @classmethod
+    def get_summarize_requirements(cls):
+        """Returns the requirement prompt."""
+        return cls.summarize_requirements
+    
+    
 
     @classmethod
     def get_brand_tuner_prompt(cls):

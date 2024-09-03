@@ -25,9 +25,9 @@ class LLM:
     def get_llm(self):
         return self.llm
     
-    def bind_tools(self, lst_tools: list, tool_must: str):
+    def get_llm_binded_function(self, lst_tools: list, tool_name_dict: dict):
         if self.api_services in ['groq', 'anthropic', 'openai']:
-            return self.llm.bind_tools(tools=lst_tools, tool_choice=tool_must)
+            return self.llm.bind(functions=lst_tools, function_call=tool_name_dict)
         elif self.api_services in ['google']:
             print('Not Suppoted in Google!!')
 

@@ -6,7 +6,7 @@ import uuid
 from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain.agents import create_openai_tools_agent, AgentExecutor
 from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import END, StateGraph
 from langchain_core.output_parsers import StrOutputParser
@@ -23,6 +23,11 @@ os.environ['LANGCHAIN_PROJECT'] = 'MARKETING_PROJECT'
 
 TAVILY_TOOL = TavilySearchResults(max_results=6)
 MODEL = LLM('groq', 'llama-3.1-70b-versatile').get_llm()
+
+REQUIREMENTS_NAME = 'requirements'
+SUMMARY_NAME = 'summarizer'
+INPUT_NAME = 'inputer'
+ROUTE_OPTIONS = [INPUT_NAME, SUMMARY_NAME]
 
 WEBSITE_DATA_AGENT = 'website_data_agent'
 CONSULTANT = 'consultant_agent'  # one with internet access
@@ -48,6 +53,58 @@ def create_agent(llm, tools, system_prompt):
 async def async_agent_node(state: AgentState, agent, name):
     result = await agent.ainvoke(state)
     return {'website_data': [HumanMessage(content=result['output'], name=name)]}
+
+
+# input node 
+def input_node(state: AgentState):
+    if state['next_requirements'] == '':
+        details = input('Give some details about your brand:\n')
+    else:
+        details = input(f"{state['message_requirements'][-1].content}:\n")
+    return {'message_requirements': [HumanMessage(content=details, name = INPUT_NAME)]}
+
+# requirements node 
+guided_json = {
+    'name': 'router_fn',
+    'description': 'Select the next step, ask user more questions or move to summary.',
+    'parameters': {
+        'type': 'object',
+        'properties': {
+            'next_requirements': {
+                'type': 'string',
+                'enum': [ROUTE_OPTIONS],
+                'description': "The input has to be called or the summarizer"
+            },
+            'question': {
+                'type': 'str',
+                'description': 'The question to be asked to the user.'
+            }
+        },
+        'required': ['next_requirements', 'question'],
+    }
+}
+
+requirements_llm = LLM('groq', 'llama-3.1-70b-versatile').get_llm_binded_function([guided_json], {'name': 'router_fn'})
+
+
+prompt = ChatPromptTemplate.from_template(Prompts.get_formater_prompt())
+requirements_chain = prompt | requirements_llm | JsonOutputFunctionsParser()
+
+
+def requirements_node(state: AgentState):
+    result = requirements_chain.invoke(state)
+    return {
+        'message_requirement': [AIMessage(content=result['question'], name= REQUIREMENTS_NAME)],
+        'next_requirements' : result['next_requirements']
+        }
+
+prompt_template = ChatPromptTemplate.from_template(Prompts.get_summarize_requirements())
+
+def summary(state: AgentState):
+    chain = prompt_template | MODEL | StrOutputParser()
+    result = chain.invoke(state)
+    return {'input_data': result}
+
 
 # creating agents
 website_data_agent = create_agent(MODEL, [research], Prompts.get_website_data())
@@ -118,9 +175,11 @@ quality_check_template = ChatPromptTemplate.from_messages([
     )]
 ).partial(options=', '.join(OPTIONS), members=', '.join(MEMBERS))
 
+QUALITY_CHECKER_MODEL = LLM('groq', 'llama-3.1-70b-versatile').get_llm_binded_function([router_function_def], {'name': 'route'})
+
 quality_check_chain = (
     quality_check_template
-    | MODEL.bind(functions=[router_function_def], function_call={'name': 'route'})
+    | QUALITY_CHECKER_MODEL
     | JsonOutputFunctionsParser()
 )
 
@@ -173,6 +232,9 @@ def save_file_node(state: AgentState):
     }
 
 workflow = StateGraph(AgentState)
+workflow.add_node(INPUT_NAME, input_node)
+workflow.add_node(REQUIREMENTS_NAME, requirements_node)
+workflow.add_node(SUMMARY_NAME, summary)
 workflow.add_node(WEBSITE_DATA_AGENT, website_data_node)
 workflow.add_node(CONSULTANT, consultant_node)
 workflow.add_node(BRAND_TUNER, brand_tuner_node)
@@ -180,7 +242,19 @@ workflow.add_node(QUALITY_CHECKER, quality_check_node)
 workflow.add_node(FORMATTER, formatter_node)
 workflow.add_node(SAVE_FILE_NODE, save_file_node)
 
-workflow.set_entry_point(WEBSITE_DATA_AGENT)
+workflow.set_entry_point(INPUT_NAME)
+workflow.add_edge(INPUT_NAME, REQUIREMENTS_NAME)
+
+workflow.add_conditional_edges(
+    REQUIREMENTS_NAME, 
+    lambda x: x['next_requirements'],
+    {
+        'SUMMARY': SUMMARY_NAME,
+        'MORE_INPUT': INPUT_NAME
+    }
+)
+
+workflow.add_edge(SUMMARY_NAME, WEBSITE_DATA_AGENT)
 workflow.add_edge(WEBSITE_DATA_AGENT, CONSULTANT)
 workflow.add_edge(CONSULTANT, BRAND_TUNER)
 workflow.add_edge(BRAND_TUNER, QUALITY_CHECKER)
@@ -199,10 +273,9 @@ workflow.add_edge(SAVE_FILE_NODE, END)
 
 graph = workflow.compile()
 
-async def run_research_graph(input):
+async def run_research_graph(initial_data):
     initial_state = AgentState(
-        input=[HumanMessage(content=input["input"])],
-        website_links=input["website_links"],
+        website_links=initial_data["website_links"],
         requirements_completed=False,
         website_data=[],
         brand_tuner=[],
@@ -216,6 +289,9 @@ async def run_research_graph(input):
         OPTIONS= ['consultant_agent', 'brand_tuner_agent', 'FINISH'],
         MEMBERS= ['consultant_agent', 'brand_tuner_agent'],
         final_output="",
+        message_requirement=[],
+        next_requirements='',
+        input_data=''
     )
         
     async for output in graph.astream(initial_state):
@@ -240,8 +316,7 @@ Footwear
 Merchandise related to movies, TV shows, and sports teams'''
 
 website_links = ['https://www.thesouledstore.com']
-test_input = {
-    "input": data_input,
+initial_data = {
     "website_links": website_links
 }
-asyncio.run(run_research_graph(test_input))
+asyncio.run(run_research_graph(initial_data))
