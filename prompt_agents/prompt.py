@@ -21,7 +21,7 @@ Ensure the document is clean, organized, and easy to read, without any additiona
     consultant_prompt = '''
 As a marketing consultant, your task is to craft detailed marketing strategies tailored to the specific goals and industry of a business. Utilize the following inputs to guide your strategy development:
 
-Input from the User about their brand: {input}
+Input from the User about their brand: {input_data}
 Feedback from Quality Check Node: {feedback}
 Last Output from Consultant Node: {last_consultant}
 Last Output from Brand Tuner Node: {last_brand_tuner}
@@ -79,7 +79,7 @@ Always incorporate Feedback from Quality Check Node if any.
     brand_tuner_prompt = '''
 As a marketing strategist, your task is to adapt a general marketing strategy for a specific industry and goal, tailoring it to align with a particular brand's identity, products, and services. Use the following inputs to guide your adaptation:
 
-Input from the User about their brand: {input}
+Input from the User about their brand: {input_data}
 Output from Consultant: {last_consultant}
 Feedback from Quality Check Node: {feedback}
 Last Output from Brand Tuner Node: {last_brand_tuner}
@@ -155,7 +155,7 @@ Always incorporate Feedback from Quality Check Node if any.
 
     requirement_prompt = '''
 You are an LLM tasked with gathering specific information about a user's brand. Your goal is to collect the following details:
-brand name, budget, goal. 
+brand name, budget, goal .
 Previous conversation: {message_requirements}.
 
 If the user provides all the necessary details, return the following JSON structure:
@@ -172,7 +172,7 @@ json
   "next_requirements": "MORE_INPUT",
   "question": "Please provide [specific detail(s) needed]"
 
-If the user's last message indicates that they wish to quit or stop, or if they do not want to provide more information, return:
+If the user's last message indicates that they wish to 'quit', 'stop', 'exit', or if they do not want to provide more information, return:
 json
 
 
@@ -183,7 +183,7 @@ Use the context from Previous conversation to evaluate the completeness of the i
 '''
 
     summarize_requirements = '''
-Summarize the whole details of the user's brand by refering \nmessages: {message_requirement}.
+Summarize the whole details of the user's brand by refering \nmessages: {message_requirements}.
 '''
 
 
@@ -192,7 +192,7 @@ As a quality check node, evaluate the outputs from the consultant and brand tune
 
 Inputs:
 
-Input from the User about their brand: {input}
+Input from the User about their brand: {input_data}
 Consultant's Output: {last_consultant}
 Brand Tuner's Output: {last_brand_tuner}
 Feedback from Previous Rounds: {feedback}

@@ -11,6 +11,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import END, StateGraph
 from langchain_core.output_parsers import StrOutputParser
 
+from colorama import Fore
 from prompt_agents.prompt import Prompts
 from models import LLM
 from state import AgentState
@@ -57,10 +58,10 @@ async def async_agent_node(state: AgentState, agent, name):
 
 # input node 
 def input_node(state: AgentState):
-    if state['next_requirements'] == '':
-        details = input('Give some details about your brand:\n')
-    else:
-        details = input(f"{state['message_requirements'][-1].content}:\n")
+    # if state['next_requirements'] == '':
+    #     details = input('Give some details about your brand:\n')
+    # else:
+    details = input(f"{Fore.CYAN}{state['message_requirements'][-1].content}{Fore.RESET}:\n")
     return {'message_requirements': [HumanMessage(content=details, name = INPUT_NAME)]}
 
 # requirements node 
@@ -73,7 +74,7 @@ guided_json = {
             'next_requirements': {
                 'type': 'string',
                 'enum': [ROUTE_OPTIONS],
-                'description': "The input has to be called or the summarizer"
+                'description': "The inputer has to be called or the summarizer"
             },
             'question': {
                 'type': 'str',
@@ -87,14 +88,14 @@ guided_json = {
 requirements_llm = LLM('groq', 'llama-3.1-70b-versatile').get_llm_binded_function([guided_json], {'name': 'router_fn'})
 
 
-prompt = ChatPromptTemplate.from_template(Prompts.get_formater_prompt())
+prompt = ChatPromptTemplate.from_template(Prompts.get_requirement_prompt())
 requirements_chain = prompt | requirements_llm | JsonOutputFunctionsParser()
 
 
 def requirements_node(state: AgentState):
     result = requirements_chain.invoke(state)
     return {
-        'message_requirement': [AIMessage(content=result['question'], name= REQUIREMENTS_NAME)],
+        'message_requirements': [AIMessage(content=result['question'], name= REQUIREMENTS_NAME)],
         'next_requirements' : result['next_requirements']
         }
 
@@ -221,12 +222,28 @@ def formatter_node(state):
         'final_output': result
     }
 
+# def save_file_node(state: AgentState):
+#     markdown_content = str(state["final_output"])
+#     name = state['website_links'][0]
+#     filename = f"./{uuid.uuid1()}.md"
+#     with open(filename, "w", encoding="utf-8") as file:
+#         file.write(markdown_content)
+#     return {
+#         'final_output': f'Saved final output to {filename}'
+#     }
+
 def save_file_node(state: AgentState):
+    output_dir = "output"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
     markdown_content = str(state["final_output"])
     name = state['website_links'][0]
-    filename = f"./{uuid.uuid1()}.md"
+    filename = os.path.join(output_dir, f"{uuid.uuid1()}.md")
+    
     with open(filename, "w", encoding="utf-8") as file:
         file.write(markdown_content)
+    
     return {
         'final_output': f'Saved final output to {filename}'
     }
@@ -242,7 +259,7 @@ workflow.add_node(QUALITY_CHECKER, quality_check_node)
 workflow.add_node(FORMATTER, formatter_node)
 workflow.add_node(SAVE_FILE_NODE, save_file_node)
 
-workflow.set_entry_point(INPUT_NAME)
+workflow.set_entry_point(REQUIREMENTS_NAME)
 workflow.add_edge(INPUT_NAME, REQUIREMENTS_NAME)
 
 workflow.add_conditional_edges(
@@ -271,7 +288,9 @@ workflow.add_conditional_edges(
 workflow.add_edge(FORMATTER, SAVE_FILE_NODE)
 workflow.add_edge(SAVE_FILE_NODE, END)
 
+# workflow.set_config(recursion_limit = 50)
 graph = workflow.compile()
+
 
 async def run_research_graph(initial_data):
     initial_state = AgentState(
@@ -289,7 +308,7 @@ async def run_research_graph(initial_data):
         OPTIONS= ['consultant_agent', 'brand_tuner_agent', 'FINISH'],
         MEMBERS= ['consultant_agent', 'brand_tuner_agent'],
         final_output="",
-        message_requirement=[],
+        message_requirements=[],
         next_requirements='',
         input_data=''
     )
@@ -302,18 +321,18 @@ async def run_research_graph(initial_data):
         print("\n---\n")
 
 
-data_input = '''Brand Name: The Souled Store
+# data_input = '''Brand Name: The Souled Store
 
-Brand Identity: A trendy and vibrant brand that caters to the youth, focusing on pop culture-inspired merchandise and apparel. The brand emphasizes creativity, self-expression, and a fun, casual lifestyle.
+# Brand Identity: A trendy and vibrant brand that caters to the youth, focusing on pop culture-inspired merchandise and apparel. The brand emphasizes creativity, self-expression, and a fun, casual lifestyle.
 
-Key Products/Services:
+# Key Products/Services:
 
-Graphic T-shirts
-Hoodies and sweatshirts
-Shorts and joggers
-Accessories (e.g., bags, caps, phone cases)
-Footwear
-Merchandise related to movies, TV shows, and sports teams'''
+# Graphic T-shirts
+# Hoodies and sweatshirts
+# Shorts and joggers
+# Accessories (e.g., bags, caps, phone cases)
+# Footwear
+# Merchandise related to movies, TV shows, and sports teams'''
 
 website_links = ['https://www.thesouledstore.com']
 initial_data = {
