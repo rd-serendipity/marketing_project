@@ -132,7 +132,6 @@ consultant_node = functools.partial(
 brand_tuner_agent = create_agent(MODEL, [TAVILY_TOOL], Prompts.get_brand_tuner_prompt())
 
 
-
 def brand_tuner_agent_node(state, agent, name):
     result = agent.invoke(state)
     # state['last_brand_tuner'] = result['output']
